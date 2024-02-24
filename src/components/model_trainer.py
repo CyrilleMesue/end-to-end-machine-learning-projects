@@ -2,30 +2,35 @@ import os
 import sys
 from dataclasses import dataclass
 
-from catboost import CatBoostRegressor
+from catboost import CatBoostRegressor, CatBoostClassifier
 from sklearn.ensemble import (
-    AdaBoostRegressor,
-    GradientBoostingRegressor,
-    RandomForestRegressor,
+    AdaBoostRegressor, AdaBoostClassifier,
+    GradientBoostingRegressor, GradientBoostingClassifier,
+    RandomForestRegressor, RandomForestClassifier
 )
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.tree import DecisionTreeRegressor
-from xgboost import XGBRegressor
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.metrics import r2_score, accuracy_score
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from xgboost import XGBRegressor, XGBClassifier 
+from sklearn.svm import SVC
+from sklearn.neural_network import MLPClassifier
 
 from src.exception import CustomException
 from src.logger import logging
 
-from src.utils import save_object,evaluate_models
+from src.utils import save_object,evaluate_models, load_json
 
 @dataclass
 class ModelTrainerConfig:
-    trained_model_file_path=os.path.join("artifacts","model.pkl")
+    basename_tag = "*"
+    trained_model_file_path=os.path.join("artifacts",f"{basename_tag}model.pkl")
 
 class ModelTrainer:
-    def __init__(self):
+    def __init__(self,
+                 modeling_type = "reg"
+                 ):
         self.model_trainer_config=ModelTrainerConfig()
+        self.modeling_type = modeling_type
 
 
     def initiate_model_trainer(self,train_array,test_array):
@@ -37,55 +42,40 @@ class ModelTrainer:
                 test_array[:,:-1],
                 test_array[:,-1]
             )
-            models = {
-                "Random Forest": RandomForestRegressor(),
-                "Decision Tree": DecisionTreeRegressor(),
-                "Gradient Boosting": GradientBoostingRegressor(),
-                "Linear Regression": LinearRegression(),
-                "XGBRegressor": XGBRegressor(),
-                "CatBoosting Regressor": CatBoostRegressor(verbose=False),
-                "AdaBoost Regressor": AdaBoostRegressor(),
-            }
-            params={
-                "Decision Tree": {
-                    'criterion':['squared_error', 'friedman_mse', 'absolute_error', 'poisson'],
-                    # 'splitter':['best','random'],
-                    # 'max_features':['sqrt','log2'],
-                },
-                "Random Forest":{
-                    # 'criterion':['squared_error', 'friedman_mse', 'absolute_error', 'poisson'],
-                 
-                    # 'max_features':['sqrt','log2',None],
-                    'n_estimators': [8,16,32,64,128,256]
-                },
-                "Gradient Boosting":{
-                    # 'loss':['squared_error', 'huber', 'absolute_error', 'quantile'],
-                    'learning_rate':[.1,.01,.05,.001],
-                    'subsample':[0.6,0.7,0.75,0.8,0.85,0.9],
-                    # 'criterion':['squared_error', 'friedman_mse'],
-                    # 'max_features':['auto','sqrt','log2'],
-                    'n_estimators': [8,16,32,64,128,256]
-                },
-                "Linear Regression":{},
-                "XGBRegressor":{
-                    'learning_rate':[.1,.01,.05,.001],
-                    'n_estimators': [8,16,32,64,128,256]
-                },
-                "CatBoosting Regressor":{
-                    'depth': [6,8,10],
-                    'learning_rate': [0.01, 0.05, 0.1],
-                    'iterations': [30, 50, 100]
-                },
-                "AdaBoost Regressor":{
-                    'learning_rate':[.1,.01,0.5,.001],
-                    # 'loss':['linear','square','exponential'],
-                    'n_estimators': [8,16,32,64,128,256]
-                }
-                
-            }
 
-            model_report:dict=evaluate_models(X_train=X_train,y_train=y_train,X_test=X_test,y_test=y_test,
-                                             models=models,param=params)
+            if self.modeling_type == "reg":
+                models = {
+                    "Random Forest": RandomForestRegressor(random_state = 32),
+                    "Decision Tree": DecisionTreeRegressor(random_state = 32),
+                    "Gradient Boosting": GradientBoostingRegressor(random_state = 32),
+                    "Linear Regression": LinearRegression(),
+                    "XGBRegressor": XGBRegressor(random_state = 32),
+                    "CatBoosting Regressor": CatBoostRegressor(random_state = 32,verbose=False),
+                    "AdaBoost Regressor": AdaBoostRegressor(random_state = 32),
+                }
+            else:
+                models = {
+                    "Random Forest": RandomForestClassifier(random_state = 32),
+                    "Decision Tree": DecisionTreeClassifier(random_state = 32),
+                    "Gradient Boosting": GradientBoostingClassifier(random_state = 32),
+                    "Logistic Regression": LogisticRegression(random_state = 32),
+                    "XGBClassifier": XGBClassifier(random_state = 32),
+                    "CatBoosting Classifier": CatBoostClassifier(random_state = 32,verbose=False),
+                    "AdaBoost Classifier": AdaBoostClassifier(random_state = 32),
+                    "MLPClassifier": MLPClassifier(random_state = 32, verbose=False),
+                    "SVC": SVC(random_state = 32)
+                }
+            load_params = load_json("notebook/data/params.json")
+            params = load_params["model_params"][self.modeling_type]
+
+            model_report:dict=evaluate_models(X_train=X_train,
+                                              y_train=y_train,
+                                              X_test=X_test,
+                                              y_test=y_test,
+                                              models=models,
+                                              param=params,
+                                              modeling_type = self.modeling_type
+                                              )
             
             ## To get best model score from dict
             best_model_score = max(sorted(model_report.values()))
@@ -97,23 +87,27 @@ class ModelTrainer:
             ]
             best_model = models[best_model_name]
 
-            if best_model_score<0.6:
-                raise CustomException("No best model found")
+            if best_model_score<0.5:
+                raise "No best model found"
             logging.info(f"Best found model on both training and testing dataset")
 
+            default_model_file_path = self.model_trainer_config.trained_model_file_path
+            basename_tag = self.model_trainer_config.basename_tag
+            model_trainer_obj_file_path = default_model_file_path.replace(basename_tag, f"{self.modeling_type}_")
             save_object(
-                file_path=self.model_trainer_config.trained_model_file_path,
+                file_path=model_trainer_obj_file_path,
                 obj=best_model
             )
 
             predicted=best_model.predict(X_test)
 
-            r2_square = r2_score(y_test, predicted)
-            return r2_square
+            test_score = 0
+            if self.modeling_type == "reg":
+                test_score = r2_score(y_test, predicted)
+            else:
+                test_score = accuracy_score(y_test, predicted)
+            return f"Best model: {best_model_name}\nBest model test score: {test_score}"
             
-
-
-
             
         except Exception as e:
             raise CustomException(e,sys)

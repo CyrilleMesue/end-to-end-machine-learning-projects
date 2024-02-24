@@ -6,4 +6,7 @@ matplotlib
 catboost
 xgboost
 dill
--e .
+streamlit
+plotly
+flask
+# -e .
