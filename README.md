@@ -1,4 +1,5 @@
 ### End-to-End Machine Learning Pipeline Project
+![Home](app.png)
 
 **Project Overview:**
 The goal of this project is to create an end-to-end machine learning pipeline capable of handling data ingestion, transformation, model training, and evaluation for both regression and classification tasks. Additionally, a user-friendly web application has been developed to facilitate predictions based on the trained models. The entire pipeline has been deployed to ensure accessibility and scalability.
